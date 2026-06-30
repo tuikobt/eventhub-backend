@@ -1,0 +1,22 @@
+spring:
+  datasource:
+    url: ${env.DATABASE_URL}
+    username: ${env.DB_USERNAME}
+    password: ${env.DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+
+jwt:
+  secret: ${env.JWT_SECRET}
+  access-token-expiration: 900000      # 15 phút (milliseconds)
+  refresh-token-expiration: 604800000  # 7 ngày  (milliseconds)
+
+server:
+  port: ${env.SERVER_PORT}
