@@ -8,8 +8,12 @@ import java.util.TimeZone;
 @SpringBootApplication
 public class BackendApplication {
 
-	public static void main(String[] args) {
+	static {
 		TimeZone.setDefault(TimeZone.getTimeZone("Asia/Ho_Chi_Minh"));
+		System.setProperty("user.timezone", "Asia/Ho_Chi_Minh");
+	}
+
+	public static void main(String[] args) {
 		SpringApplication.run(BackendApplication.class, args);
 	}
 
