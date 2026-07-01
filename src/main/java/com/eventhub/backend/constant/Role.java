@@ -1,4 +1,4 @@
-package com.eventhub.backend.entity;
+package com.eventhub.backend.constant;
 
 public enum Role {
     USER,
