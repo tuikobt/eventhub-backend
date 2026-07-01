@@ -1,5 +1,6 @@
 package com.eventhub.backend.entity;
 
+import com.eventhub.backend.constant.Role;
 import jakarta.persistence.*;
 import lombok.*;
 import org.springframework.security.core.GrantedAuthority;

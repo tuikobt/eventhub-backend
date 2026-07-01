@@ -1,10 +1,12 @@
 package com.eventhub.backend.service;
 
+import com.eventhub.backend.constant.MessageConstants;
+import com.eventhub.backend.constant.SecurityConstants;
 import com.eventhub.backend.dto.AuthResponse;
 import com.eventhub.backend.dto.LoginRequest;
 import com.eventhub.backend.dto.RegisterRequest;
+import com.eventhub.backend.constant.Role;
 import com.eventhub.backend.entity.RefreshToken;
-import com.eventhub.backend.entity.Role;
 import com.eventhub.backend.entity.User;
 import com.eventhub.backend.exception.EmailAlreadyExistsException;
 import com.eventhub.backend.exception.TokenException;
@@ -39,7 +41,7 @@ public class AuthService {
         // 1. Kiểm tra email đã tồn tại chưa
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new EmailAlreadyExistsException(
-                "Email '" + request.getEmail() + "' đã được sử dụng"
+                MessageConstants.EMAIL_ALREADY_EXISTS
             );
         }
 
@@ -59,7 +61,7 @@ public class AuthService {
         String accessToken = jwtService.generateAccessToken(user);
         String refreshTokenStr = createRefreshToken(user);
 
-        return buildAuthResponse(user, accessToken);
+        return buildAuthResponse(user, accessToken, refreshTokenStr);
     }
 
     /**
@@ -83,7 +85,7 @@ public class AuthService {
         String accessToken = jwtService.generateAccessToken(user);
         String refreshTokenStr = createRefreshToken(user);
 
-        return buildAuthResponse(user, accessToken);
+        return buildAuthResponse(user, accessToken, refreshTokenStr);
     }
 
     /**
@@ -99,22 +101,21 @@ public class AuthService {
     public AuthResponse refreshToken(String refreshTokenStr) {
         // 1. Tìm token trong DB
         RefreshToken refreshToken = refreshTokenRepository.findByToken(refreshTokenStr)
-                .orElseThrow(() -> new TokenException("Refresh token không tồn tại"));
+                .orElseThrow(() -> new TokenException(MessageConstants.REFRESH_TOKEN_NOT_FOUND));
 
         // 2. REUSE DETECTION: token đã bị revoke mà vẫn được dùng lại
         if (refreshToken.isRevoked()) {
             // Đây là dấu hiệu token bị đánh cắp!
             // Revoke TOÀN BỘ token của user → buộc đăng nhập lại
             refreshTokenRepository.revokeAllByUserId(refreshToken.getUser().getId());
-            throw new TokenException("Phát hiện refresh token bị sử dụng lại. "
-                    + "Đã thu hồi toàn bộ session. Vui lòng đăng nhập lại.");
+            throw new TokenException(MessageConstants.REFRESH_TOKEN_REUSE_DETECTED);
         }
 
         // 3. Kiểm tra hết hạn
         if (refreshToken.isExpired()) {
             refreshToken.setRevoked(true);
             refreshTokenRepository.save(refreshToken);
-            throw new TokenException("Refresh token đã hết hạn. Vui lòng đăng nhập lại.");
+            throw new TokenException(MessageConstants.REFRESH_TOKEN_EXPIRED);
         }
 
         // 4. ROTATION: revoke token cũ, tạo token mới
@@ -125,7 +126,7 @@ public class AuthService {
         String newAccessToken = jwtService.generateAccessToken(user);
         String newRefreshTokenStr = createRefreshToken(user);
 
-        return buildAuthResponse(user, newAccessToken);
+        return buildAuthResponse(user, newAccessToken, newRefreshTokenStr);
     }
 
     /**
@@ -159,24 +160,11 @@ public class AuthService {
         return tokenStr;
     }
 
-    /**
-     * Lấy refresh token string mới nhất của user (để set vào cookie)
-     */
-    public String getLatestRefreshToken(User user) {
-        // Token mới nhất vừa tạo
-        return refreshTokenRepository.findByToken(
-                refreshTokenRepository.findAll().stream()
-                        .filter(rt -> rt.getUser().getId().equals(user.getId()) && !rt.isRevoked())
-                        .reduce((first, second) -> second)
-                        .map(RefreshToken::getToken)
-                        .orElse("")
-        ).map(RefreshToken::getToken).orElse("");
-    }
-
-    private AuthResponse buildAuthResponse(User user, String accessToken) {
+    private AuthResponse buildAuthResponse(User user, String accessToken, String refreshToken) {
         return AuthResponse.builder()
                 .accessToken(accessToken)
-                .tokenType("Bearer")
+                .tokenType(SecurityConstants.TOKEN_TYPE)
+                .refreshToken(refreshToken)
                 .user(AuthResponse.UserInfo.builder()
                         .id(user.getId())
                         .fullName(user.getFullName())

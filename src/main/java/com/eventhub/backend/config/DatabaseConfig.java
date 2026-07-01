@@ -2,6 +2,7 @@ package com.eventhub.backend.config;
 
 import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
+import org.springframework.boot.jdbc.DataSourceBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -52,12 +53,12 @@ public class DatabaseConfig {
                     jdbcUrlBuilder.append("?").append(query);
                 }
 
-                HikariDataSource dataSource = new HikariDataSource();
-                dataSource.setJdbcUrl(jdbcUrlBuilder.toString());
-                dataSource.setUsername(username);
-                dataSource.setPassword(password);
-                dataSource.setDriverClassName("org.postgresql.Driver");
-                return dataSource;
+                return DataSourceBuilder.create()
+                        .type(HikariDataSource.class)
+                        .url(jdbcUrlBuilder.toString())
+                        .username(username)
+                        .password(password)
+                        .build();
             } catch (URISyntaxException | NullPointerException e) {
                 // Fallback to auto-configured datasource on parsing error
             }
