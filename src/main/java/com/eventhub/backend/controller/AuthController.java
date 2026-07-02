@@ -2,10 +2,10 @@ package com.eventhub.backend.controller;
 
 import com.eventhub.backend.constant.MessageConstants;
 import com.eventhub.backend.constant.SecurityConstants;
-import com.eventhub.backend.dto.ApiResponse;
-import com.eventhub.backend.dto.AuthResponse;
-import com.eventhub.backend.dto.LoginRequest;
-import com.eventhub.backend.dto.RegisterRequest;
+import com.eventhub.backend.dto.request.LoginRequest;
+import com.eventhub.backend.dto.request.RegisterRequest;
+import com.eventhub.backend.dto.response.ApiResponse;
+import com.eventhub.backend.dto.response.AuthResponse;
 import com.eventhub.backend.service.AuthService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
@@ -147,7 +147,8 @@ public class AuthController {
     }
 
     private String extractRefreshTokenFromCookies(HttpServletRequest request) {
-        if (request.getCookies() == null) return null;
+        if (request.getCookies() == null)
+            return null;
         return Arrays.stream(request.getCookies())
                 .filter(c -> SecurityConstants.COOKIE_NAME.equals(c.getName()))
                 .findFirst()

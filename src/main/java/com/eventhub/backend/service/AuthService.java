@@ -2,15 +2,16 @@ package com.eventhub.backend.service;
 
 import com.eventhub.backend.constant.MessageConstants;
 import com.eventhub.backend.constant.SecurityConstants;
-import com.eventhub.backend.dto.AuthResponse;
-import com.eventhub.backend.dto.LoginRequest;
-import com.eventhub.backend.dto.RegisterRequest;
+import com.eventhub.backend.dto.request.LoginRequest;
+import com.eventhub.backend.dto.request.RegisterRequest;
+import com.eventhub.backend.dto.response.AuthResponse;
 import com.eventhub.backend.constant.Role;
 import com.eventhub.backend.entity.RefreshToken;
 import com.eventhub.backend.entity.User;
 import com.eventhub.backend.exception.EmailAlreadyExistsException;
 import com.eventhub.backend.exception.TokenException;
 import com.eventhub.backend.repository.RefreshTokenRepository;
+import com.eventhub.backend.mapper.UserMapper;
 import com.eventhub.backend.repository.UserRepository;
 import com.eventhub.backend.security.JwtService;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
+    private final UserMapper userMapper;
 
     /**
      * ĐĂNG KÝ tài khoản mới
@@ -41,18 +43,14 @@ public class AuthService {
         // 1. Kiểm tra email đã tồn tại chưa
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new EmailAlreadyExistsException(
-                MessageConstants.EMAIL_ALREADY_EXISTS
-            );
+                    MessageConstants.EMAIL_ALREADY_EXISTS);
         }
 
-        // 2. Tạo User entity
-        User user = User.builder()
-                .fullName(request.getFullName())
-                .email(request.getEmail())
-                .password(passwordEncoder.encode(request.getPassword()))
-                .role(Role.USER)
-                .emailVerified(false)
-                .build();
+        // 2. Tạo User entity bằng Mapper
+        User user = userMapper.toUser(request);
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setRole(Role.USER);
+        user.setEmailVerified(false);
 
         // 3. Lưu vào database
         userRepository.save(user);
@@ -73,9 +71,7 @@ public class AuthService {
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                         request.getEmail(),
-                        request.getPassword()
-                )
-        );
+                        request.getPassword()));
 
         // 2. Lấy user
         User user = userRepository.findByEmail(request.getEmail())
@@ -165,12 +161,7 @@ public class AuthService {
                 .accessToken(accessToken)
                 .tokenType(SecurityConstants.TOKEN_TYPE)
                 .refreshToken(refreshToken)
-                .user(AuthResponse.UserInfo.builder()
-                        .id(user.getId())
-                        .fullName(user.getFullName())
-                        .email(user.getEmail())
-                        .role(user.getRole().name())
-                        .build())
+                .user(userMapper.toUserInfo(user))
                 .build();
     }
 }

@@ -1,4 +1,4 @@
-package com.eventhub.backend.dto;
+package com.eventhub.backend.dto.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

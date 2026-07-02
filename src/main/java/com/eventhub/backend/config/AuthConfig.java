@@ -15,7 +15,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 @Configuration
 @RequiredArgsConstructor
-public class ApplicationConfig {
+public class AuthConfig {
 
     private final UserRepository userRepository;
 
@@ -23,8 +23,7 @@ public class ApplicationConfig {
     public UserDetailsService userDetailsService() {
         return username -> userRepository.findByEmail(username)
                 .orElseThrow(() -> new UsernameNotFoundException(
-                    "Không tìm thấy user với email: " + username
-                ));
+                        "Not found user with email: " + username));
     }
 
     @Bean
