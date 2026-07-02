@@ -1,6 +1,6 @@
 package com.eventhub.backend.config;
 
-import com.eventhub.backend.repository.UserRepository;
+import com.eventhub.backend.modules.auth.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

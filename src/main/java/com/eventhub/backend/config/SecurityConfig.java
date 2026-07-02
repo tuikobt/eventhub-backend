@@ -1,6 +1,6 @@
 package com.eventhub.backend.config;
 
-import com.eventhub.backend.security.JwtAuthenticationFilter;
+import com.eventhub.backend.infrastructure.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

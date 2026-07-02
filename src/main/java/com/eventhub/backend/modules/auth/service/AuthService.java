@@ -1,0 +1,167 @@
+package com.eventhub.backend.modules.auth.service;
+
+import com.eventhub.backend.common.constant.MessageConstants;
+import com.eventhub.backend.common.constant.SecurityConstants;
+import com.eventhub.backend.common.constant.Role;
+import com.eventhub.backend.modules.auth.dto.LoginRequest;
+import com.eventhub.backend.modules.auth.dto.RegisterRequest;
+import com.eventhub.backend.modules.auth.dto.AuthResponse;
+import com.eventhub.backend.modules.auth.entity.RefreshToken;
+import com.eventhub.backend.modules.auth.entity.User;
+import com.eventhub.backend.modules.auth.exception.EmailAlreadyExistsException;
+import com.eventhub.backend.modules.auth.exception.TokenException;
+import com.eventhub.backend.modules.auth.repository.RefreshTokenRepository;
+import com.eventhub.backend.modules.auth.mapper.UserMapper;
+import com.eventhub.backend.modules.auth.repository.UserRepository;
+import com.eventhub.backend.infrastructure.security.JwtService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+@Service
+@RequiredArgsConstructor
+public class AuthService {
+
+    private final UserRepository userRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
+    private final AuthenticationManager authenticationManager;
+    private final UserMapper userMapper;
+
+    /**
+     * ĐĂNG KÝ tài khoản mới
+     */
+    @Transactional
+    public AuthResponse register(RegisterRequest request) {
+        // 1. Kiểm tra email đã tồn tại chưa
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new EmailAlreadyExistsException(
+                    MessageConstants.EMAIL_ALREADY_EXISTS);
+        }
+
+        // 2. Tạo User entity bằng Mapper
+        User user = userMapper.toUser(request);
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setRole(Role.USER);
+        user.setEmailVerified(false);
+
+        // 3. Lưu vào database
+        userRepository.save(user);
+
+        // 4. Tạo tokens
+        String accessToken = jwtService.generateAccessToken(user);
+        String refreshTokenStr = createRefreshToken(user);
+
+        return buildAuthResponse(user, accessToken, refreshTokenStr);
+    }
+
+    /**
+     * ĐĂNG NHẬP
+     */
+    @Transactional
+    public AuthResponse login(LoginRequest request) {
+        // 1. Authenticate (tự throw BadCredentialsException nếu sai)
+        authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(
+                        request.getEmail(),
+                        request.getPassword()));
+
+        // 2. Lấy user
+        User user = userRepository.findByEmail(request.getEmail())
+                .orElseThrow();
+
+        // 3. Tạo tokens
+        String accessToken = jwtService.generateAccessToken(user);
+        String refreshTokenStr = createRefreshToken(user);
+
+        return buildAuthResponse(user, accessToken, refreshTokenStr);
+    }
+
+    /**
+     * LÀM MỚI ACCESS TOKEN (Refresh Token Rotation)
+     *
+     * Flow:
+     * 1. Tìm refresh token trong DB
+     * 2. Nếu đã bị revoke → REUSE DETECTION → revoke toàn bộ token của user
+     * 3. Nếu hết hạn → throw
+     * 4. Revoke token cũ, tạo token mới (rotation)
+     */
+    @Transactional
+    public AuthResponse refreshToken(String refreshTokenStr) {
+        // 1. Tìm token trong DB
+        RefreshToken refreshToken = refreshTokenRepository.findByToken(refreshTokenStr)
+                .orElseThrow(() -> new TokenException(MessageConstants.REFRESH_TOKEN_NOT_FOUND));
+
+        // 2. REUSE DETECTION: token đã bị revoke mà vẫn được dùng lại
+        if (refreshToken.isRevoked()) {
+            // Đây là dấu hiệu token bị đánh cắp!
+            // Revoke TOÀN BỘ token của user → buộc đăng nhập lại
+            refreshTokenRepository.revokeAllByUserId(refreshToken.getUser().getId());
+            throw new TokenException(MessageConstants.REFRESH_TOKEN_REUSE_DETECTED);
+        }
+
+        // 3. Kiểm tra hết hạn
+        if (refreshToken.isExpired()) {
+            refreshToken.setRevoked(true);
+            refreshTokenRepository.save(refreshToken);
+            throw new TokenException(MessageConstants.REFRESH_TOKEN_EXPIRED);
+        }
+
+        // 4. ROTATION: revoke token cũ, tạo token mới
+        refreshToken.setRevoked(true);
+        refreshTokenRepository.save(refreshToken);
+
+        User user = refreshToken.getUser();
+        String newAccessToken = jwtService.generateAccessToken(user);
+        String newRefreshTokenStr = createRefreshToken(user);
+
+        return buildAuthResponse(user, newAccessToken, newRefreshTokenStr);
+    }
+
+    /**
+     * ĐĂNG XUẤT — revoke refresh token
+     */
+    @Transactional
+    public void logout(String refreshTokenStr) {
+        refreshTokenRepository.findByToken(refreshTokenStr)
+                .ifPresent(token -> {
+                    token.setRevoked(true);
+                    refreshTokenRepository.save(token);
+                });
+    }
+
+    // ===== Helper methods =====
+
+    /**
+     * Tạo refresh token (UUID) lưu vào DB
+     */
+    private String createRefreshToken(User user) {
+        String tokenStr = UUID.randomUUID().toString();
+
+        RefreshToken refreshToken = RefreshToken.builder()
+                .user(user)
+                .token(tokenStr)
+                .revoked(false)
+                .expiresAt(LocalDateTime.now().plusDays(7))
+                .build();
+
+        refreshTokenRepository.save(refreshToken);
+        return tokenStr;
+    }
+
+    private AuthResponse buildAuthResponse(User user, String accessToken, String refreshToken) {
+        return AuthResponse.builder()
+                .accessToken(accessToken)
+                .tokenType(SecurityConstants.TOKEN_TYPE)
+                .refreshToken(refreshToken)
+                .user(userMapper.toUserInfo(user))
+                .build();
+    }
+}
